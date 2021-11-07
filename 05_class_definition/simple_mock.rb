@@ -37,3 +37,47 @@
 # obj.imitated_method #=> true
 # obj.called_times(:imitated_method) #=> 2
 # ```
+
+module SimpleMock
+  define_singleton_method(:new) do
+    Class.new { include SimpleMock }.new
+  end
+
+  define_singleton_method(:mock) do |obj|
+    obj.tap { |o| o.class.class_eval { include SimpleMock } }
+  end
+
+  def method_call_count_mapped
+    @method_call_count_mapped ||= {}
+  end
+
+  def expects(method_name, return_value)
+    define_singleton_method(method_name) do
+      increment_call_count(method_name)
+      return_value
+    end
+  end
+
+  def watch(method_name)
+    if self.class.instance_methods.include?(method_name)
+      define_singleton_method method_name do |*args, &block|
+        increment_call_count(method_name)
+        super(*args, &block)
+      end
+    end
+
+    method_call_count_mapped[method_name] ||= 0
+  end
+
+  def called_times(method_name)
+    method_call_count_mapped[method_name]
+  end
+
+  private
+
+  def increment_call_count(method_name)
+    if method_call_count_mapped[method_name]
+      method_call_count_mapped[method_name] += 1
+    end
+  end
+end
