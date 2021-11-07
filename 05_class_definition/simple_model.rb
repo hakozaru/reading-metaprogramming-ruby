@@ -14,4 +14,58 @@
 # 3. 履歴がある場合、すべての操作履歴を放棄し、値も初期状態に戻す `restore!` メソッドを作成する
 
 module SimpleModel
+  def self.included(mod)
+    mod.define_singleton_method(:attr_accessor) do |*names|
+      mod.class_eval { @attributes = (@attributes || []) | names }
+
+      names.each do |name|
+        define_method(name) { instance_variable_get("@#{name}") }
+
+        define_method("#{name}=") do |value|
+          histories = (instance_variable_get("@#{name}_histories") || []) << value
+          instance_variable_set("@#{name}_histories", histories)
+          instance_variable_set("@#{name}", value)
+        end
+
+        define_method("#{name}_changed?") do
+          initial_val = instance_variable_get("@#{name}_initial_value")
+          histories   = instance_variable_get("@#{name}_histories")
+
+          return false unless initial_val && histories
+
+          initial_val != histories.last
+        end
+      end
+    end
+
+    def initialize(attributes)
+      attributes.each do |(key, val)|
+        next unless defined_attributes.include?(key)
+        instance_variable_set("@#{key}_initial_value", val)
+        instance_variable_set("@#{key}", val)
+      end
+    end
+
+    def changed?
+      defined_attributes.any? do |attr|
+        instance_variable_get("@#{attr}_histories")
+      end
+    end
+
+    def restore!
+      return unless changed?
+
+      defined_attributes.each do |attr|
+        next unless instance_variable_get("@#{attr}_histories")
+        instance_variable_set("@#{attr}_histories", nil)
+        instance_variable_set("@#{attr}", instance_variable_get("@#{attr}_initial_value"))
+      end
+    end
+
+    private
+
+    def defined_attributes
+      @attributes ||= self.class.instance_variable_get(:@attributes)
+    end
+  end
 end
